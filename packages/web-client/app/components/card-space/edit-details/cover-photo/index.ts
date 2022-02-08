@@ -1,6 +1,4 @@
-import { ImageUploadSuccessResult } from '@cardstack/web-client/components/image-uploader';
 import { WorkflowCardComponentArgs } from '@cardstack/web-client/models/workflow';
-import { ImageValidation } from '@cardstack/web-client/utils/image';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -10,25 +8,18 @@ export const IMAGE_EDITOR_ELEMENT_ID = 'card-space-image-editor';
 import config from '@cardstack/web-client/config/environment';
 
 import { task, TaskGenerator } from 'ember-concurrency';
-import { taskFor } from 'ember-concurrency-ts';
 import HubAuthentication from '@cardstack/web-client/services/hub-authentication';
+import { IMAGE_UPLOADER_STATES } from '@cardstack/web-client/components/common/image-upload-interface';
+import { taskFor } from 'ember-concurrency-ts';
 
 export default class CoverPhotoComponent extends Component<WorkflowCardComponentArgs> {
   @service('hub-authentication') declare hubAuthentication: HubAuthentication;
 
   @tracked coverImage = '';
-  @tracked processedImage = {
-    type: '',
-    filename: '',
-    preview: '',
-  };
-  @tracked showEditor = false;
+  @tracked
+  imageUploadState: typeof IMAGE_UPLOADER_STATES[keyof typeof IMAGE_UPLOADER_STATES] =
+    'default';
   @tracked imageUploadErrorMessage = '';
-  @tracked imageUploadState = 'valid';
-  acceptedFileTypes = ['image/jpeg', 'image/png'];
-  desiredWidth = 700;
-  desiredHeight = 300;
-
   imageEditorElement = document.getElementById(IMAGE_EDITOR_ELEMENT_ID);
 
   constructor(owner: unknown, args: WorkflowCardComponentArgs) {
@@ -37,61 +28,62 @@ export default class CoverPhotoComponent extends Component<WorkflowCardComponent
       this.args.workflowSession.getValue<string>('profileCoverImageUrl') ?? '';
   }
 
+  get uploaderOptions() {
+    return {
+      state: this.imageUploadState,
+      errorMessage: this.imageUploadErrorMessage,
+      image: this.coverImage,
+      cta: 'Select a Photo',
+      description: 'Cover photo',
+      imageRequirements:
+        'Images must be in jpg or png format and max 1MB in size',
+    };
+  }
+
+  get editorOptions() {
+    return {
+      width: 700,
+      height: 300,
+      rootElement: this.imageEditorElement,
+    };
+  }
+
+  get validationOptions() {
+    return {
+      fileType: ['image/jpeg', 'image/png'],
+      maxFileSize: 1000 * 1000,
+    };
+  }
+
   get profilePhoto() {
     return this.args.workflowSession.getValue('profileImageUrl');
   }
 
-  get imageValidation() {
-    return new ImageValidation({
-      fileType: this.acceptedFileTypes,
-      maxFileSize: 1 * 1000 * 1000, // 1 MB
-    });
-  }
-
-  @action async onUpload(image: ImageUploadSuccessResult): Promise<void> {
-    let validationResult = await this.imageValidation.validate(image.file);
-
-    if (!validationResult.valid) {
-      this.imageUploadErrorMessage = validationResult.message;
-      this.imageUploadState = 'error';
-      return;
-    }
-
-    this.processImage(image);
-  }
-
-  processImage(image: ImageUploadSuccessResult) {
-    this.processedImage = {
-      type: image.file.type,
-      filename: image.file.name,
-      preview: image.preview,
-    };
-
-    this.showEditor = true;
-    this.imageUploadErrorMessage = '';
+  @action onError(e: any) {
+    this.imageUploadState = IMAGE_UPLOADER_STATES.error;
+    this.imageUploadErrorMessage = 'Oh no!!!!!';
+    console.error(e);
+    Sentry.captureException(e);
   }
 
   @action onImageRemoved() {
     taskFor(this.saveImageEditDataTask).cancelAll();
     this.args.workflowSession.delete('profileCoverImageUrl');
     this.coverImage = '';
-    this.imageUploadState = 'valid';
+    this.imageUploadState = IMAGE_UPLOADER_STATES.default;
     this.imageUploadErrorMessage = '';
   }
 
   @task *saveImageEditDataTask(data: {
     preview: string;
     file: Blob;
+    filename: string;
   }): TaskGenerator<void> {
     try {
       this.coverImage = data.preview;
       let formdata = new FormData();
 
-      formdata.append(
-        this.processedImage.filename,
-        data.file,
-        this.processedImage.filename
-      );
+      formdata.append(data.filename, data.file, data.filename);
 
       this.imageUploadState = 'loading';
       let response = yield (yield fetch(`${config.hubURL}/upload`, {
@@ -106,7 +98,7 @@ export default class CoverPhotoComponent extends Component<WorkflowCardComponent
         let url = response.data.attributes.url;
         this.args.workflowSession.setValue('profileCoverImageUrl', url);
         this.coverImage = url;
-        this.imageUploadState = 'valid';
+        this.imageUploadState = IMAGE_UPLOADER_STATES.default;
       } else if (response.errors) {
         if (
           response.errors.length === 1 &&
@@ -141,17 +133,6 @@ export default class CoverPhotoComponent extends Component<WorkflowCardComponent
       this.coverImage = '';
       this.imageUploadState = 'error';
       this.imageUploadErrorMessage = 'Failed to upload file';
-    } finally {
-      this.processedImage = {
-        type: '',
-        filename: '',
-        preview: '',
-      };
     }
-  }
-
-  @action logUploadError(e: Error) {
-    console.error('Failed to upload file to browser', e);
-    Sentry.captureException(e);
   }
 }

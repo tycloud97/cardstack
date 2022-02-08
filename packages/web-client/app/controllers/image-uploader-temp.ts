@@ -3,7 +3,6 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 
 import { ImageValidation } from '@cardstack/web-client/utils/image';
-import { ImageUploadSuccessResult } from '../components/image-uploader';
 
 class ImageUploaderController extends Controller {
   @tracked editing: string | undefined = undefined;
@@ -18,7 +17,7 @@ class ImageUploaderController extends Controller {
     });
   }
 
-  @action async onUpload(image: ImageUploadSuccessResult): Promise<void> {
+  @action async onUpload(image: any): Promise<void> {
     let result = await this.imageValidation.validate(image.file);
 
     if (result.valid) {

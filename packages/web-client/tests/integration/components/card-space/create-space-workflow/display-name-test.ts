@@ -9,7 +9,7 @@ import { WorkflowSession } from '@cardstack/web-client/models/workflow';
 import { createDepotSafe } from '@cardstack/web-client/utils/test-factories';
 import config from '@cardstack/web-client/config/environment';
 import { IMAGE_EDITOR_ELEMENT_ID } from '@cardstack/web-client/components/card-space/create-space-workflow/display-name';
-import { mockPngUpload } from '@cardstack/web-client/components/image-uploader';
+import { mockPngUpload } from '@cardstack/web-client/components/common/image-upload-action';
 import { MirageTestContext, setupMirage } from 'ember-cli-mirage/test-support';
 
 const DISPLAY_NAME_FIELD = '[data-test-card-space-display-name-field]';
