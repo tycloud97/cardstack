@@ -51,4 +51,5 @@ client.on('message', async (message: Discord.Message) => {
   }
 });
 
+
 client.login(process.env.DISCORD_TOKEN);
